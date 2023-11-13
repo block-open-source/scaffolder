@@ -38,90 +38,105 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 		option(&opts)
 	}
 
-	return walkDir(source, func(srcPath string, d fs.DirEntry) error {
+	deferredSymlinks := map[string]string{}
+
+	err := walkDir(source, func(srcPath string, d fs.DirEntry) error {
 		path, err := filepath.Rel(source, srcPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get relative path: %w", err)
 		}
 
 		info, err := d.Info()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get file info: %w", err)
 		}
 
-		if strings.HasSuffix(path, ".tmpl") {
-			newPath := strings.TrimSuffix(path, ".tmpl")
-			if err = os.Rename(path, newPath); err != nil {
-				return fmt.Errorf("failed to rename file: %w", err)
-			}
-			path = newPath
-		}
-
-		// Evaluate the last component of path name templates.
-		dir := filepath.Dir(path)
-		origName := filepath.Base(path)
-		newName, err := evaluate(origName, ctx, opts.funcs)
+		dstPath, err := evaluate(path, ctx, opts.funcs)
 		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+			return fmt.Errorf("failed to evaluate path name: %w", err)
 		}
+		dstPath = filepath.Join(destination, dstPath)
+		dstPath = strings.TrimSuffix(dstPath, ".tmpl")
 
-		dstPath := filepath.Join(destination, dir, newName)
-
-		err = os.Remove(dstPath)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("%s: %w", dstPath, err)
-		}
-
-		dstDir := filepath.Dir(dstPath)
-		if err := os.MkdirAll(dstDir, 0700); err != nil {
-			return fmt.Errorf("%s: %w", dstPath, err)
-		}
-
-		if info.Mode()&os.ModeSymlink != 0 {
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
 			target, err := os.Readlink(srcPath)
 			if err != nil {
-				return fmt.Errorf("%s: %w", srcPath, err)
+				return fmt.Errorf("failed to read symlink: %w", err)
 			}
 
 			target, err = evaluate(target, ctx, opts.funcs)
 			if err != nil {
-				return fmt.Errorf("%s: %w", srcPath, err)
+				return fmt.Errorf("failed to evaluate symlink target: %w", err)
 			}
 
 			// Ensure symlink is relative.
 			if filepath.IsAbs(target) {
 				rel, err := filepath.Rel(filepath.Dir(dstPath), target)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to make symlink relative: %w", err)
 				}
 				target = rel
 			}
 
-			return os.Symlink(target, dstPath)
-		}
+			deferredSymlinks[dstPath] = target
 
-		if !info.Mode().IsRegular() {
+		case info.Mode().IsDir():
+			if err := os.MkdirAll(dstPath, 0700); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+
+		case info.Mode().IsRegular():
+			// Evaluate file content.
+			template, err := os.ReadFile(srcPath)
+			if err != nil {
+				return fmt.Errorf("failed to read file: %w", err)
+			}
+			content, err := evaluate(string(template), ctx, opts.funcs)
+			if err != nil {
+				return fmt.Errorf("%s: failed to evaluate template: %w", srcPath, err)
+			}
+			err = os.WriteFile(dstPath, []byte(content), info.Mode())
+			if err != nil {
+				return fmt.Errorf("failed to write file: %w", err)
+			}
+
+		default:
 			return fmt.Errorf("%s: unsupported file type %s", srcPath, info.Mode())
-		}
-
-		// Evaluate file content.
-		template, err := os.ReadFile(srcPath)
-		if err != nil {
-			return fmt.Errorf("%s: %w", srcPath, err)
-		}
-		content, err := evaluate(string(template), ctx, opts.funcs)
-		if err != nil {
-			return fmt.Errorf("%s: %w", srcPath, err)
-		}
-		err = os.WriteFile(dstPath, []byte(content), info.Mode())
-		if err != nil {
-			return fmt.Errorf("%s: %w", dstPath, err)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	for dstPath := range deferredSymlinks {
+		if err := applySymlinks(deferredSymlinks, dstPath); err != nil {
+			return fmt.Errorf("failed to apply symlink: %w", err)
+		}
+	}
+	return nil
 }
 
-// Walk dir executing fn after each entry.
+// Recursively apply symlinks.
+func applySymlinks(symlinks map[string]string, path string) error {
+	target, ok := symlinks[path]
+	if !ok {
+		return nil
+	}
+	targetPath := filepath.Clean(filepath.Join(filepath.Dir(path), target))
+	if err := applySymlinks(symlinks, targetPath); err != nil {
+		return fmt.Errorf("failed to apply symlink: %w", err)
+	}
+	delete(symlinks, path)
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove symlink target: %w", err)
+	}
+	return os.Symlink(target, path)
+}
+
+// Depth-first walk of dir executing fn after each entry.
 func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -129,14 +144,19 @@ func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
+			err = fn(filepath.Join(dir, entry.Name()), entry)
+			if err != nil {
+				return err
+			}
 			err = walkDir(filepath.Join(dir, entry.Name()), fn)
 			if err != nil {
 				return err
 			}
-		}
-		err = fn(filepath.Join(dir, entry.Name()), entry)
-		if err != nil {
-			return err
+		} else {
+			err = fn(filepath.Join(dir, entry.Name()), entry)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

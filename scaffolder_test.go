@@ -21,6 +21,7 @@ func TestScaffolder(t *testing.T) {
 		content string
 	}
 	expect := []file{
+		{"intermediate", 0o700 | os.ModeSymlink, "Hello, test!\n"},
 		{"regular-test", 0o600, "Hello, test!\n"},
 		{"symlink-test", 0o700 | os.ModeSymlink, "Hello, test!\n"},
 	}
