@@ -5,8 +5,7 @@
 Scaffolder evaluates the scaffolding files at the given destination against
 ctx:
 
-- Both paths and file contents are evaluated.
+- Both path names and file contents are evaluated.
 - If a file name ends with `.tmpl`, the `.tmpl` suffix is removed.
-- The functions `snake`, `camel`, `lowerCamel`, `kebab`, `upper`, and `lower` are available.
 
 [cookiecutter]: https://github.com/cookiecutter/cookiecutter
