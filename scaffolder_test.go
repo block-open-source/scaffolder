@@ -13,7 +13,7 @@ func TestScaffolder(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := Scaffold("testdata/template", tmpDir, map[string]any{
 		"Name": "test",
-	})
+	}, Exclude("excluded"))
 	assert.NoError(t, err)
 	type file struct {
 		name    string

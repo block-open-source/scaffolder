@@ -10,7 +10,8 @@ import (
 )
 
 type scaffoldOptions struct {
-	funcs template.FuncMap
+	funcs   template.FuncMap
+	exclude map[string]bool
 }
 
 type Option func(*scaffoldOptions)
@@ -19,6 +20,15 @@ type Option func(*scaffoldOptions)
 func Functions(funcs template.FuncMap) Option {
 	return func(o *scaffoldOptions) {
 		o.funcs = funcs
+	}
+}
+
+// Exclude the given relative paths from scaffolding.
+func Exclude(paths ...string) Option {
+	return func(so *scaffoldOptions) {
+		for _, path := range paths {
+			so.exclude[path] = true
+		}
 	}
 }
 
@@ -33,7 +43,9 @@ func Functions(funcs template.FuncMap) Option {
 //
 // [cookiecutter]: https://github.com/cookiecutter/cookiecutter
 func Scaffold(source, destination string, ctx any, options ...Option) error {
-	opts := scaffoldOptions{}
+	opts := scaffoldOptions{
+		exclude: map[string]bool{},
+	}
 	for _, option := range options {
 		option(&opts)
 	}
@@ -44,6 +56,10 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 		path, err := filepath.Rel(source, srcPath)
 		if err != nil {
 			return fmt.Errorf("failed to get relative path: %w", err)
+		}
+
+		if opts.exclude[path] {
+			return nil
 		}
 
 		info, err := d.Info()
