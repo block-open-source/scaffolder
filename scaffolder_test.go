@@ -35,10 +35,14 @@ func TestScaffolder(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
+		var content []byte
+		if !d.IsDir() {
+			content, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
 		}
+
 		actual = append(actual, file{name: rel, mode: info.Mode() & (os.ModeSymlink | 0o700), content: string(content)})
 		return nil
 	})

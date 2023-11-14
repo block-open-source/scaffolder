@@ -11,7 +11,7 @@ import (
 
 type scaffoldOptions struct {
 	funcs   template.FuncMap
-	exclude map[string]bool
+	exclude []string
 }
 
 type Option func(*scaffoldOptions)
@@ -23,12 +23,10 @@ func Functions(funcs template.FuncMap) Option {
 	}
 }
 
-// Exclude the given relative paths from scaffolding.
+// Exclude the given relative path prefixes from scaffolding.
 func Exclude(paths ...string) Option {
 	return func(so *scaffoldOptions) {
-		for _, path := range paths {
-			so.exclude[path] = true
-		}
+		so.exclude = append(so.exclude, paths...)
 	}
 }
 
@@ -43,9 +41,7 @@ func Exclude(paths ...string) Option {
 //
 // [cookiecutter]: https://github.com/cookiecutter/cookiecutter
 func Scaffold(source, destination string, ctx any, options ...Option) error {
-	opts := scaffoldOptions{
-		exclude: map[string]bool{},
-	}
+	opts := scaffoldOptions{}
 	for _, option := range options {
 		option(&opts)
 	}
@@ -58,8 +54,10 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			return fmt.Errorf("failed to get relative path: %w", err)
 		}
 
-		if opts.exclude[path] {
-			return nil
+		for _, exclude := range opts.exclude {
+			if strings.HasPrefix(path, exclude) {
+				return nil
+			}
 		}
 
 		info, err := d.Info()
