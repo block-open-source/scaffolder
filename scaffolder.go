@@ -46,6 +46,11 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 		option(&opts)
 	}
 
+	// Create the destination directory if it doesn't exist
+	if err := os.MkdirAll(destination, 0700); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
 	deferredSymlinks := map[string]string{}
 
 	err := walkDir(source, func(srcPath string, d fs.DirEntry) error {

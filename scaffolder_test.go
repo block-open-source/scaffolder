@@ -50,3 +50,47 @@ func TestScaffolder(t *testing.T) {
 	sort.Slice(actual, func(i, j int) bool { return actual[i].name < actual[j].name })
 	assert.Equal(t, expect, actual)
 }
+
+func TestScaffolderInNewDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	nonExistentDir := filepath.Join(tmpDir, "nonExistingOutput")
+	err := Scaffold("testdata/template", nonExistentDir, map[string]any{
+		"Name": "test",
+	}, Exclude("excluded"))
+	assert.NoError(t, err)
+	type file struct {
+		name    string
+		mode    os.FileMode
+		content string
+	}
+	expect := []file{
+		{name: "nonExistingOutput", mode: 0o700},
+		{"nonExistingOutput/intermediate", 0o700 | os.ModeSymlink, "Hello, test!\n"},
+		{"nonExistingOutput/regular-test", 0o600, "Hello, test!\n"},
+		{"nonExistingOutput/symlink-test", 0o700 | os.ModeSymlink, "Hello, test!\n"},
+	}
+	actual := []file{}
+	err = walkDir(tmpDir, func(path string, d os.DirEntry) error {
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(tmpDir, path)
+		if err != nil {
+			return err
+		}
+		var content []byte
+		if !d.IsDir() {
+			content, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+		}
+
+		actual = append(actual, file{name: rel, mode: info.Mode() & (os.ModeSymlink | 0o700), content: string(content)})
+		return nil
+	})
+	assert.NoError(t, err)
+	sort.Slice(actual, func(i, j int) bool { return actual[i].name < actual[j].name })
+	assert.Equal(t, expect, actual)
+}
