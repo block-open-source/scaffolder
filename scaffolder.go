@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 )
@@ -23,7 +24,9 @@ func Functions(funcs template.FuncMap) Option {
 	}
 }
 
-// Exclude the given relative path prefixes from scaffolding.
+// Exclude the given regex paths from scaffolding.
+//
+// Matching occurs before template evaluation and .tmpl suffix removal.
 func Exclude(paths ...string) Option {
 	return func(so *scaffoldOptions) {
 		so.exclude = append(so.exclude, paths...)
@@ -55,7 +58,9 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 		}
 
 		for _, exclude := range opts.exclude {
-			if strings.HasPrefix(path, exclude) {
+			if matched, err := regexp.MatchString(exclude, path); err != nil {
+				return fmt.Errorf("invalid exclude pattern %q: %w", exclude, err)
+			} else if matched {
 				return nil
 			}
 		}
@@ -152,16 +157,19 @@ func applySymlinks(symlinks map[string]string, path string) error {
 
 // Depth-first walk of dir executing fn after each entry.
 func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
+	dirInfo, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if err = fn(dir, fs.FileInfoToDirEntry(dirInfo)); err != nil {
+		return err
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			err = fn(filepath.Join(dir, entry.Name()), entry)
-			if err != nil {
-				return err
-			}
 			err = walkDir(filepath.Join(dir, entry.Name()), fn)
 			if err != nil {
 				return err

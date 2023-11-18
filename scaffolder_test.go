@@ -10,7 +10,7 @@ import (
 )
 
 func TestScaffolder(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := filepath.Join(t.TempDir(), "new")
 	err := Scaffold("testdata/template", tmpDir, map[string]any{
 		"Name": "test",
 	}, Exclude("excluded"))
@@ -41,9 +41,9 @@ func TestScaffolder(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			actual = append(actual, file{name: rel, mode: info.Mode() & (os.ModeSymlink | 0o700), content: string(content)})
 		}
 
-		actual = append(actual, file{name: rel, mode: info.Mode() & (os.ModeSymlink | 0o700), content: string(content)})
 		return nil
 	})
 	assert.NoError(t, err)
