@@ -12,7 +12,8 @@ import (
 func TestScaffolder(t *testing.T) {
 	tmpDir := filepath.Join(t.TempDir(), "new")
 	err := Scaffold("testdata/template", tmpDir, map[string]any{
-		"Name": "test",
+		"Name":    "test",
+		"Include": true,
 	}, Exclude("excluded"))
 	assert.NoError(t, err)
 	type file struct {
@@ -21,6 +22,8 @@ func TestScaffolder(t *testing.T) {
 		content string
 	}
 	expect := []file{
+		{"include", 0o600, "included"},
+		{"included-dir/included", 0o600, "included"},
 		{"intermediate", 0o700 | os.ModeSymlink, "Hello, test!\n"},
 		{"regular-test", 0o600, "Hello, test!\n"},
 		{"symlink-test", 0o700 | os.ModeSymlink, "Hello, test!\n"},

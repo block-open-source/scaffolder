@@ -1,6 +1,7 @@
 package scaffolder
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -70,10 +71,17 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			return fmt.Errorf("failed to get file info: %w", err)
 		}
 
+		if lastComponent, err := evaluate(filepath.Base(path), ctx, opts.funcs); err != nil {
+			return fmt.Errorf("failed to evaluate path name: %w", err)
+		} else if lastComponent == "" {
+			return errSkip
+		}
+
 		dstPath, err := evaluate(path, ctx, opts.funcs)
 		if err != nil {
 			return fmt.Errorf("failed to evaluate path name: %w", err)
 		}
+
 		dstPath = filepath.Join(destination, dstPath)
 		dstPath = strings.TrimSuffix(dstPath, ".tmpl")
 
@@ -155,6 +163,9 @@ func applySymlinks(symlinks map[string]string, path string) error {
 	return os.Symlink(target, path)
 }
 
+// errSkip is returned by walkDir to skip a file or directory.
+var errSkip = errors.New("skip directory")
+
 // Depth-first walk of dir executing fn after each entry.
 func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
 	dirInfo, err := os.Stat(dir)
@@ -162,6 +173,9 @@ func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
 		return err
 	}
 	if err = fn(dir, fs.FileInfoToDirEntry(dirInfo)); err != nil {
+		if errors.Is(err, errSkip) {
+			return nil
+		}
 		return err
 	}
 	entries, err := os.ReadDir(dir)
@@ -171,12 +185,12 @@ func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			err = walkDir(filepath.Join(dir, entry.Name()), fn)
-			if err != nil {
+			if err != nil && !errors.Is(err, errSkip) {
 				return err
 			}
 		} else {
 			err = fn(filepath.Join(dir, entry.Name()), entry)
-			if err != nil {
+			if err != nil && !errors.Is(err, errSkip) {
 				return err
 			}
 		}
