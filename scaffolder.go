@@ -12,7 +12,7 @@ import (
 )
 
 type scaffoldOptions struct {
-	after   func(path string, d fs.DirEntry) error
+	after   func(path string) error
 	funcs   template.FuncMap
 	exclude []string
 }
@@ -37,7 +37,7 @@ func Exclude(paths ...string) Option {
 
 // After configures Scaffolder to call "after" for each file or directory after
 // it is created.
-func After(after func(path string, d fs.DirEntry) error) Option {
+func After(after func(path string) error) Option {
 	return func(so *scaffoldOptions) { so.after = after }
 }
 
@@ -53,7 +53,7 @@ func After(after func(path string, d fs.DirEntry) error) Option {
 // [cookiecutter]: https://github.com/cookiecutter/cookiecutter
 func Scaffold(source, destination string, ctx any, options ...Option) error {
 	opts := scaffoldOptions{
-		after: func(path string, d fs.DirEntry) error { return nil },
+		after: func(path string) error { return nil },
 	}
 	for _, option := range options {
 		option(&opts)
@@ -121,7 +121,7 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			if err := os.MkdirAll(dstPath, 0700); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
-			if err := opts.after(dstPath, d); err != nil {
+			if err := opts.after(dstPath); err != nil {
 				return fmt.Errorf("after directory: %w", err)
 			}
 
@@ -139,7 +139,7 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			if err != nil {
 				return fmt.Errorf("failed to write file: %w", err)
 			}
-			if err := opts.after(dstPath, d); err != nil {
+			if err := opts.after(dstPath); err != nil {
 				return fmt.Errorf("after file: %w", err)
 			}
 
