@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", ":semanticCommitTypeAll(chore)", ":semanticCommitScope(deps)", "group:allNonMajor"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["github.com/TBD54566975/scaffolder"],
+      "matchManagers": ["gomod"],
+      "enabled": false
+    }
+  ]
+}
