@@ -1,6 +1,6 @@
 module github.com/TBD54566975/scaffolder/cmd/scaffolder
 
-go 1.21.3
+go 1.21.4
 
 replace github.com/TBD54566975/scaffolder => ../..
 
