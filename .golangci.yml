@@ -56,6 +56,8 @@ linters:
     - deadcode
     - golint
     - depguard
+    - tagalign
+    - gomoddirectives
 
 linters-settings:
   govet:

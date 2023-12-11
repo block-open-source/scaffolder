@@ -1,7 +1,8 @@
+// Package scaffolder is a general purpose file-system based scaffolding tool
+// inspired by cookiecutter.
 package scaffolder
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,17 +13,66 @@ import (
 )
 
 type scaffoldOptions struct {
-	after   func(path string) error
-	funcs   template.FuncMap
-	exclude []string
+	Config
+	plugins []Extension
 }
 
+// Extension's allow the scaffolder to be extended.
+type Extension interface {
+	Extend(mutableConfig *Config) error
+	AfterEach(path string) error
+}
+
+// ExtensionFunc is a convenience type for creating an Extension.Extend from a function.
+type ExtensionFunc func(mutableConfig *Config) error
+
+func (f ExtensionFunc) Extend(mutableConfig *Config) error { return f(mutableConfig) }
+func (f ExtensionFunc) AfterEach(path string) error        { return nil }
+
+// AfterExtensionFunc is a convenience type for creating an Extension.AfterEach from a function.
+type AfterExtensionFunc func(path string) error
+
+func (f AfterExtensionFunc) Extend(mutableConfig *Config) error { return nil }
+func (f AfterExtensionFunc) AfterEach(path string) error        { return f(path) }
+
+// Option is a function that modifies the behaviour of the scaffolder.
 type Option func(*scaffoldOptions)
 
-// Functions defines functions to use in scaffolding templates.
-func Functions(funcs template.FuncMap) Option {
+// FuncMap is a map of functions to use in scaffolding templates.
+//
+// The key is the function name and the value is a function taking a single
+// argument and returning either `string` or `(string, error)`.
+type FuncMap = template.FuncMap
+
+// Config for the scaffolding.
+type Config struct {
+	Context any
+	Funcs   FuncMap
+	Exclude []string
+
+	source string
+	target string
+}
+
+func (c *Config) Source() string { return c.source }
+func (c *Config) Target() string { return c.target }
+
+// Functions adds functions to use in scaffolding templates.
+func Functions(funcs FuncMap) Option {
 	return func(o *scaffoldOptions) {
-		o.funcs = funcs
+		for k, v := range funcs {
+			o.Funcs[k] = v
+		}
+	}
+}
+
+// Extend adds an Extension to the scaffolder.
+//
+// An extension can be used to add functions to the template context, to
+// modify the template context, and so on.
+func Extend(plugin Extension) Option {
+	return func(o *scaffoldOptions) {
+		o.plugins = append(o.plugins, plugin)
 	}
 }
 
@@ -31,29 +81,32 @@ func Functions(funcs template.FuncMap) Option {
 // Matching occurs before template evaluation and .tmpl suffix removal.
 func Exclude(paths ...string) Option {
 	return func(so *scaffoldOptions) {
-		so.exclude = append(so.exclude, paths...)
+		so.Exclude = append(so.Exclude, paths...)
 	}
 }
 
-// After configures Scaffolder to call "after" for each file or directory after
-// it is created.
-func After(after func(path string) error) Option {
-	return func(so *scaffoldOptions) { so.after = after }
+// AfterEach configures Scaffolder to call "after" for each file or directory
+// created.
+//
+// Useful for setting file permissions, etc.
+//
+// Each AfterEach function is called in order.
+func AfterEach(after func(path string) error) Option {
+	return func(so *scaffoldOptions) {
+		so.plugins = append(so.plugins, AfterExtensionFunc(after))
+	}
 }
 
-// Scaffold evaluates the scaffolding files at the given source using ctx, then
-// copies them into destination.
-//
-// Both path names and file contents are evaluated.
-//
-// If a file name ends with `.tmpl`, the `.tmpl` suffix is removed.
-//
-// Scaffold is inspired by [cookiecutter].
-//
-// [cookiecutter]: https://github.com/cookiecutter/cookiecutter
+// Scaffold evaluates the scaffolding files at the given source using ctx, while
+// copying them into destination.
 func Scaffold(source, destination string, ctx any, options ...Option) error {
 	opts := scaffoldOptions{
-		after: func(path string) error { return nil },
+		Config: Config{
+			source:  source,
+			target:  destination,
+			Context: ctx,
+			Funcs:   FuncMap{},
+		},
 	}
 	for _, option := range options {
 		option(&opts)
@@ -61,13 +114,19 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 
 	deferredSymlinks := map[string]string{}
 
-	err := walkDir(source, func(srcPath string, d fs.DirEntry) error {
+	for _, plugin := range opts.plugins {
+		if err := plugin.Extend(&opts.Config); err != nil {
+			return fmt.Errorf("failed to extend scaffolder: %w", err)
+		}
+	}
+
+	err := WalkDir(source, func(srcPath string, d fs.DirEntry) error {
 		path, err := filepath.Rel(source, srcPath)
 		if err != nil {
 			return fmt.Errorf("failed to get relative path: %w", err)
 		}
 
-		for _, exclude := range opts.exclude {
+		for _, exclude := range opts.Exclude {
 			if matched, err := regexp.MatchString(exclude, path); err != nil {
 				return fmt.Errorf("invalid exclude pattern %q: %w", exclude, err)
 			} else if matched {
@@ -80,13 +139,13 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			return fmt.Errorf("failed to get file info: %w", err)
 		}
 
-		if lastComponent, err := evaluate(filepath.Base(path), ctx, opts.funcs); err != nil {
+		if lastComponent, err := evaluate(filepath.Base(path), ctx, opts.Funcs); err != nil {
 			return fmt.Errorf("failed to evaluate path name: %w", err)
 		} else if lastComponent == "" {
-			return errSkip
+			return ErrSkip
 		}
 
-		dstPath, err := evaluate(path, ctx, opts.funcs)
+		dstPath, err := evaluate(path, ctx, opts.Funcs)
 		if err != nil {
 			return fmt.Errorf("failed to evaluate path name: %w", err)
 		}
@@ -101,7 +160,7 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 				return fmt.Errorf("failed to read symlink: %w", err)
 			}
 
-			target, err = evaluate(target, ctx, opts.funcs)
+			target, err = evaluate(target, ctx, opts.Funcs)
 			if err != nil {
 				return fmt.Errorf("failed to evaluate symlink target: %w", err)
 			}
@@ -121,8 +180,10 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			if err := os.MkdirAll(dstPath, 0700); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
-			if err := opts.after(dstPath); err != nil {
-				return fmt.Errorf("after directory: %w", err)
+			for _, plugin := range opts.plugins {
+				if err := plugin.AfterEach(dstPath); err != nil {
+					return fmt.Errorf("failed to run after: %w", err)
+				}
 			}
 
 		case info.Mode().IsRegular():
@@ -131,7 +192,7 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			if err != nil {
 				return fmt.Errorf("failed to read file: %w", err)
 			}
-			content, err := evaluate(string(template), ctx, opts.funcs)
+			content, err := evaluate(string(template), ctx, opts.Funcs)
 			if err != nil {
 				return fmt.Errorf("%s: failed to evaluate template: %w", srcPath, err)
 			}
@@ -139,8 +200,10 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			if err != nil {
 				return fmt.Errorf("failed to write file: %w", err)
 			}
-			if err := opts.after(dstPath); err != nil {
-				return fmt.Errorf("after file: %w", err)
+			for _, plugin := range opts.plugins {
+				if err := plugin.AfterEach(dstPath); err != nil {
+					return fmt.Errorf("failed to run after: %w", err)
+				}
 			}
 
 		default:
@@ -176,41 +239,6 @@ func applySymlinks(symlinks map[string]string, path string) error {
 		return fmt.Errorf("failed to remove symlink target: %w", err)
 	}
 	return os.Symlink(target, path)
-}
-
-// errSkip is returned by walkDir to skip a file or directory.
-var errSkip = errors.New("skip directory")
-
-// Depth-first walk of dir executing fn after each entry.
-func walkDir(dir string, fn func(path string, d fs.DirEntry) error) error {
-	dirInfo, err := os.Stat(dir)
-	if err != nil {
-		return err
-	}
-	if err = fn(dir, fs.FileInfoToDirEntry(dirInfo)); err != nil {
-		if errors.Is(err, errSkip) {
-			return nil
-		}
-		return err
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			err = walkDir(filepath.Join(dir, entry.Name()), fn)
-			if err != nil && !errors.Is(err, errSkip) {
-				return err
-			}
-		} else {
-			err = fn(filepath.Join(dir, entry.Name()), entry)
-			if err != nil && !errors.Is(err, errSkip) {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func evaluate(tmpl string, ctx any, funcs template.FuncMap) (string, error) {
