@@ -11,11 +11,13 @@ import (
 	"github.com/iancoleman/strcase"
 
 	"github.com/TBD54566975/scaffolder"
+	"github.com/TBD54566975/scaffolder/extensions/javascript"
 )
 
 var cli struct {
-	JSON *os.File `help:"JSON file containing the context to use."`
-	Dir  string   `arg:"" help:"Directory to scaffold."`
+	JSON     *os.File `help:"JSON file containing the context to use."`
+	Template string   `arg:"" help:"Template directory." type:"existingdir"`
+	Dest     string   `arg:"" help:"Destination directory to scaffold." type:"existingdir"`
 }
 
 func main() {
@@ -26,7 +28,7 @@ func main() {
 			kctx.FatalIfErrorf(err, "failed to decode JSON")
 		}
 	}
-	err := scaffolder.Scaffold(cli.Dir, context, scaffolder.Functions(template.FuncMap{
+	err := scaffolder.Scaffold(cli.Template, cli.Template, context, scaffolder.Functions(template.FuncMap{
 		"snake":          strcase.ToSnake,
 		"screamingSnake": strcase.ToScreamingSnake,
 		"camel":          strcase.ToCamel,
@@ -39,6 +41,6 @@ func main() {
 		"typename": func(v any) string {
 			return reflect.Indirect(reflect.ValueOf(v)).Type().Name()
 		},
-	}))
+	}), scaffolder.Extend(javascript.Extension("template.js")))
 	kctx.FatalIfErrorf(err)
 }
