@@ -18,6 +18,7 @@ func TestExtension(t *testing.T) {
 	err := scaffolder.Scaffold("testdata", dest, Context{
 		Name: "Alice",
 	},
+		scaffolder.Exclude("^go.mod$"),
 		scaffolder.Extend(Extension("template.js")),
 		scaffolder.Functions(scaffolder.FuncMap{
 			"goHello": func(c Context) string {
