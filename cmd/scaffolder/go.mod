@@ -16,7 +16,7 @@ require (
 )
 
 require (
-	github.com/TBD54566975/scaffolder/extensions/javascript v0.0.0-00010101000000-000000000000
+	github.com/TBD54566975/scaffolder/extensions/javascript v0.7.1
 	github.com/alecthomas/kong v0.8.1
 )
 
