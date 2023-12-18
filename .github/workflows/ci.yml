@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cashapp/activate-hermit@v1
       - run: |
-          find . -name go.mod | xargs -n1 dirname | while read dir; do (
+          find . -name go.mod | grep -v /testdata | xargs -n1 dirname | while read dir; do (
             cd "$dir"
             go mod tidy
             go test -v ./...
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cashapp/activate-hermit@v1
       - run: |
-          find . -name go.mod | xargs -n1 dirname | while read dir; do (
+          find . -name go.mod | grep -v /testdata | xargs -n1 dirname | while read dir; do (
             cd "$dir"
             go mod tidy
             golangci-lint run
