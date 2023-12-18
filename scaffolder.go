@@ -154,8 +154,9 @@ func (s *state) scaffold(srcDir, dstDir string, ctx any) error {
 nextEntry:
 	for _, entry := range entries {
 		srcPath := filepath.Join(srcDir, entry.Name())
+		relPath, _ := filepath.Rel(s.source, srcPath) // Can't fail.
 		for _, exclude := range s.Exclude {
-			if matched, err := regexp.MatchString(exclude, srcPath); err != nil {
+			if matched, err := regexp.MatchString(exclude, relPath); err != nil {
 				return fmt.Errorf("invalid exclude pattern %q: %w", exclude, err)
 			} else if matched {
 				continue nextEntry
