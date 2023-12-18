@@ -5,6 +5,7 @@ package scaffolder
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,11 +30,11 @@ type ExtensionFunc func(mutableConfig *Config) error
 func (f ExtensionFunc) Extend(mutableConfig *Config) error { return f(mutableConfig) }
 func (f ExtensionFunc) AfterEach(path string) error        { return nil }
 
-// AfterExtensionFunc is a convenience type for creating an Extension.AfterEach from a function.
-type AfterExtensionFunc func(path string) error
+// AfterEachExtensionFunc is a convenience type for creating an Extension.AfterEach from a function.
+type AfterEachExtensionFunc func(path string) error
 
-func (f AfterExtensionFunc) Extend(mutableConfig *Config) error { return nil }
-func (f AfterExtensionFunc) AfterEach(path string) error        { return f(path) }
+func (f AfterEachExtensionFunc) Extend(mutableConfig *Config) error { return nil }
+func (f AfterEachExtensionFunc) AfterEach(path string) error        { return f(path) }
 
 // Option is a function that modifies the behaviour of the scaffolder.
 type Option func(*scaffoldOptions)
@@ -93,7 +94,7 @@ func Exclude(paths ...string) Option {
 // Each AfterEach function is called in order.
 func AfterEach(after func(path string) error) Option {
 	return func(so *scaffoldOptions) {
-		so.plugins = append(so.plugins, AfterExtensionFunc(after))
+		so.plugins = append(so.plugins, AfterEachExtensionFunc(after))
 	}
 }
 
@@ -105,14 +106,14 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			source:  source,
 			target:  destination,
 			Context: ctx,
-			Funcs:   FuncMap{},
+			Funcs: FuncMap{
+				"dir": func(name string, ctx any) (string, error) { panic("not implemented") },
+			},
 		},
 	}
 	for _, option := range options {
 		option(&opts)
 	}
-
-	deferredSymlinks := map[string]string{}
 
 	for _, plugin := range opts.plugins {
 		if err := plugin.Extend(&opts.Config); err != nil {
@@ -120,120 +121,153 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 		}
 	}
 
-	err := WalkDir(source, func(srcPath string, d fs.DirEntry) error {
-		path, err := filepath.Rel(source, srcPath)
-		if err != nil {
-			return fmt.Errorf("failed to get relative path: %w", err)
-		}
-
-		for _, exclude := range opts.Exclude {
-			if matched, err := regexp.MatchString(exclude, path); err != nil {
-				return fmt.Errorf("invalid exclude pattern %q: %w", exclude, err)
-			} else if matched {
-				return nil
-			}
-		}
-
-		info, err := d.Info()
-		if err != nil {
-			return fmt.Errorf("failed to get file info: %w", err)
-		}
-
-		if lastComponent, err := evaluate(filepath.Base(path), ctx, opts.Funcs); err != nil {
-			return fmt.Errorf("failed to evaluate path name: %w", err)
-		} else if lastComponent == "" {
-			return ErrSkip
-		}
-
-		dstPath, err := evaluate(path, ctx, opts.Funcs)
-		if err != nil {
-			return fmt.Errorf("failed to evaluate path name: %w", err)
-		}
-
-		dstPath = filepath.Join(destination, dstPath)
-		dstPath = strings.TrimSuffix(dstPath, ".tmpl")
-
-		switch {
-		case info.Mode()&os.ModeSymlink != 0:
-			target, err := os.Readlink(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to read symlink: %w", err)
-			}
-
-			target, err = evaluate(target, ctx, opts.Funcs)
-			if err != nil {
-				return fmt.Errorf("failed to evaluate symlink target: %w", err)
-			}
-
-			// Ensure symlink is relative.
-			if filepath.IsAbs(target) {
-				rel, err := filepath.Rel(filepath.Dir(dstPath), target)
-				if err != nil {
-					return fmt.Errorf("failed to make symlink relative: %w", err)
-				}
-				target = rel
-			}
-
-			deferredSymlinks[dstPath] = target
-
-		case info.Mode().IsDir():
-			if err := os.MkdirAll(dstPath, 0700); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-			for _, plugin := range opts.plugins {
-				if err := plugin.AfterEach(dstPath); err != nil {
-					return fmt.Errorf("failed to run after: %w", err)
-				}
-			}
-
-		case info.Mode().IsRegular():
-			// Evaluate file content.
-			template, err := os.ReadFile(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to read file: %w", err)
-			}
-			content, err := evaluate(string(template), ctx, opts.Funcs)
-			if err != nil {
-				return fmt.Errorf("%s: failed to evaluate template: %w", srcPath, err)
-			}
-			err = os.WriteFile(dstPath, []byte(content), info.Mode())
-			if err != nil {
-				return fmt.Errorf("failed to write file: %w", err)
-			}
-			for _, plugin := range opts.plugins {
-				if err := plugin.AfterEach(dstPath); err != nil {
-					return fmt.Errorf("failed to run after: %w", err)
-				}
-			}
-
-		default:
-			return fmt.Errorf("%s: unsupported file type %s", srcPath, info.Mode())
-		}
-		return nil
-	})
-	if err != nil {
-		return err
+	s := &state{
+		scaffoldOptions:  opts,
+		deferredSymlinks: map[string]string{},
 	}
 
-	for dstPath := range deferredSymlinks {
-		if err := applySymlinks(deferredSymlinks, dstPath); err != nil {
+	if err := s.scaffold(source, destination, ctx); err != nil {
+		return fmt.Errorf("failed to scaffold: %w", err)
+	}
+
+	for dstPath := range s.deferredSymlinks {
+		if err := s.applySymlinks(dstPath); err != nil {
 			return fmt.Errorf("failed to apply symlink: %w", err)
 		}
 	}
 	return nil
 }
 
+type state struct {
+	scaffoldOptions
+	deferredSymlinks map[string]string
+}
+
+func (s *state) scaffold(srcDir, dstDir string, ctx any) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	if err := os.Mkdir(dstDir, 0700); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+nextEntry:
+	for _, entry := range entries {
+		srcPath := filepath.Join(srcDir, entry.Name())
+		for _, exclude := range s.Exclude {
+			if matched, err := regexp.MatchString(exclude, srcPath); err != nil {
+				return fmt.Errorf("invalid exclude pattern %q: %w", exclude, err)
+			} else if matched {
+				continue nextEntry
+			}
+		}
+		funcs := maps.Clone(s.Funcs)
+		subDirs := map[string]any{}
+		funcs["dir"] = func(name string, ctx any) string {
+			subDirs[name] = ctx
+			return name + "\000"
+		}
+		dstName, err := evaluate(srcPath, entry.Name(), ctx, funcs)
+		if err != nil {
+			return fmt.Errorf("failed to evaluate path name %q: %w", filepath.Join(dstDir, entry.Name()), err)
+		}
+		if dstName == "" {
+			continue
+		}
+
+		dstPath := filepath.Join(dstDir, dstName)
+		dstPath = strings.TrimSuffix(dstPath, ".tmpl")
+
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("failed to get file info: %w", err)
+		}
+
+		if len(subDirs) == 0 {
+			if err := s.scaffoldEntry(info, srcPath, dstPath, ctx, funcs); err != nil {
+				return err
+			}
+		}
+		for subDir, subCtx := range subDirs {
+			if err := s.scaffoldEntry(info, srcPath, filepath.Join(dstDir, subDir), subCtx, funcs); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *state) scaffoldEntry(info fs.FileInfo, srcPath, dstPath string, ctx any, funcs template.FuncMap) error {
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		target, err := os.Readlink(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read symlink: %w", err)
+		}
+
+		target, err = evaluate(srcPath, target, ctx, funcs)
+		if err != nil {
+			return fmt.Errorf("failed to evaluate symlink target: %w", err)
+		}
+
+		// Ensure symlink is relative.
+		if filepath.IsAbs(target) {
+			rel, err := filepath.Rel(filepath.Dir(dstPath), target)
+			if err != nil {
+				return fmt.Errorf("failed to make symlink relative: %w", err)
+			}
+			target = rel
+		}
+
+		s.deferredSymlinks[dstPath] = target
+
+	case info.Mode().IsDir():
+		if err := os.MkdirAll(dstPath, 0700); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+		for _, plugin := range s.plugins {
+			if err := plugin.AfterEach(dstPath); err != nil {
+				return fmt.Errorf("failed to run after: %w", err)
+			}
+		}
+		return s.scaffold(srcPath, dstPath, ctx)
+
+	case info.Mode().IsRegular():
+		template, err := os.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read file: %w", err)
+		}
+		content, err := evaluate(srcPath, string(template), ctx, funcs)
+		if err != nil {
+			return fmt.Errorf("%s: failed to evaluate template: %w", srcPath, err)
+		}
+		err = os.WriteFile(dstPath, []byte(content), info.Mode())
+		if err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+		for _, plugin := range s.plugins {
+			if err := plugin.AfterEach(dstPath); err != nil {
+				return fmt.Errorf("failed to run after: %w", err)
+			}
+		}
+
+	default:
+		return fmt.Errorf("%s: unsupported file type %s", srcPath, info.Mode())
+	}
+	return nil
+}
+
 // Recursively apply symlinks.
-func applySymlinks(symlinks map[string]string, path string) error {
-	target, ok := symlinks[path]
+func (s *state) applySymlinks(path string) error {
+	target, ok := s.deferredSymlinks[path]
 	if !ok {
 		return nil
 	}
 	targetPath := filepath.Clean(filepath.Join(filepath.Dir(path), target))
-	if err := applySymlinks(symlinks, targetPath); err != nil {
+	if err := s.applySymlinks(targetPath); err != nil {
 		return fmt.Errorf("failed to apply symlink: %w", err)
 	}
-	delete(symlinks, path)
+	delete(s.deferredSymlinks, path)
 	err := os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove symlink target: %w", err)
@@ -241,8 +275,8 @@ func applySymlinks(symlinks map[string]string, path string) error {
 	return os.Symlink(target, path)
 }
 
-func evaluate(tmpl string, ctx any, funcs template.FuncMap) (string, error) {
-	t, err := template.New("scaffolding").Funcs(funcs).Parse(tmpl)
+func evaluate(path, tmpl string, ctx any, funcs template.FuncMap) (string, error) {
+	t, err := template.New(path).Funcs(funcs).Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}

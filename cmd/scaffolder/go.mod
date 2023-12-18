@@ -3,7 +3,7 @@ module github.com/TBD54566975/scaffolder/cmd/scaffolder
 go 1.21.5
 
 require (
-	github.com/TBD54566975/scaffolder v0.6.2
+	github.com/TBD54566975/scaffolder v0.7.0
 	github.com/iancoleman/strcase v0.3.0
 )
 
