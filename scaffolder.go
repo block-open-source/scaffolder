@@ -13,6 +13,8 @@ import (
 	"text/template"
 )
 
+const recurseFuncName = "push"
+
 type scaffoldOptions struct {
 	Config
 	plugins []Extension
@@ -107,7 +109,7 @@ func Scaffold(source, destination string, ctx any, options ...Option) error {
 			target:  destination,
 			Context: ctx,
 			Funcs: FuncMap{
-				"dir": func(name string, ctx any) (string, error) { panic("not implemented") },
+				recurseFuncName: func(name string, ctx any) (string, error) { panic("not implemented") },
 			},
 		},
 	}
@@ -163,9 +165,11 @@ nextEntry:
 			}
 		}
 		funcs := maps.Clone(s.Funcs)
-		subDirs := map[string]any{}
-		funcs["dir"] = func(name string, ctx any) string {
-			subDirs[name] = ctx
+
+		// Add a recursive function that can be used to recurse into subcontexts for files and directories.
+		recursiveContext := map[string]any{}
+		funcs[recurseFuncName] = func(name string, ctx any) string {
+			recursiveContext[name] = ctx
 			return name + "\000"
 		}
 		dstName, err := evaluate(srcPath, entry.Name(), ctx, funcs)
@@ -184,13 +188,13 @@ nextEntry:
 			return fmt.Errorf("failed to get file info: %w", err)
 		}
 
-		if len(subDirs) == 0 {
+		if len(recursiveContext) == 0 {
 			if err := s.scaffoldEntry(info, srcPath, dstPath, ctx, funcs); err != nil {
 				return err
 			}
 		}
-		for subDir, subCtx := range subDirs {
-			if err := s.scaffoldEntry(info, srcPath, filepath.Join(dstDir, subDir), subCtx, funcs); err != nil {
+		for subEntry, subCtx := range recursiveContext {
+			if err := s.scaffoldEntry(info, srcPath, filepath.Join(dstDir, subEntry), subCtx, funcs); err != nil {
 				return err
 			}
 		}

@@ -11,9 +11,10 @@ ctx using the following rules:
 - If a file or directory name evalutes to the empty string it will be excluded.
 - If a file named `template.js` exists in the root of the template directory,
   all functions defined in this file will be available as Go template functions.
-- Directory names in templates can be expanded into multiple directories by
-  using the `dir` function. This function takes two arguments, the directory name
-  and the context to use when evaluating templates under the directory.
+- Directory and file names in templates can be expanded multiple times
+  using the `push` function. This function takes two arguments, the
+  file/directory name and the context to use when evaluating templates within
+  the file/directory.
 
 ## Examples
 
@@ -21,7 +22,7 @@ ctx using the following rules:
 
 ```gotemplate
 template/
-  {{ range .Modules }}{{ dir .Name  . }}{{ end }}/
+  {{ range .Modules }}{{ push .Name  . }}{{ end }}/
     file.txt
 ```
 

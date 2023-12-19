@@ -3,7 +3,7 @@ module github.com/TBD54566975/scaffolder/extensions/javascript
 go 1.21.5
 
 require (
-	github.com/TBD54566975/scaffolder v0.7.1
+	github.com/TBD54566975/scaffolder v0.8.0
 	github.com/alecthomas/assert/v2 v2.4.1
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
 )

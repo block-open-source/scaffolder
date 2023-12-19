@@ -20,13 +20,15 @@ func TestScaffolder(t *testing.T) {
 	}, scaffolder.Exclude("excluded"))
 	assert.NoError(t, err)
 	expect := []scaffoldertest.File{
+		{Name: "first.txt", Mode: 0o600, Content: "first"},
+		{Name: "first/first", Mode: 0o600},
 		{Name: "include", Mode: 0o600, Content: "included"},
 		{Name: "included-dir/included", Mode: 0o600, Content: "included"},
 		{Name: "intermediate", Mode: 0o700 | os.ModeSymlink, Content: "Hello, test!\n"},
 		{Name: "regular-test", Mode: 0o600, Content: "Hello, test!\n"},
+		{Name: "second.txt", Mode: 0o600, Content: "second"},
+		{Name: "second/second", Mode: 0o600},
 		{Name: "symlink-test", Mode: 0o700 | os.ModeSymlink, Content: "Hello, test!\n"},
-		{Name: "first/test", Mode: 0o600},
-		{Name: "second/test", Mode: 0o600},
 	}
 	scaffoldertest.AssertFilesEqual(t, tmpDir, expect)
 }
