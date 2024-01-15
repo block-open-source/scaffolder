@@ -1,6 +1,6 @@
 module github.com/TBD54566975/scaffolder
 
-go 1.21.5
+go 1.21.6
 
 require github.com/alecthomas/assert/v2 v2.4.1
 

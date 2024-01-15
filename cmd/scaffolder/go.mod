@@ -1,6 +1,6 @@
 module github.com/TBD54566975/scaffolder/cmd/scaffolder
 
-go 1.21.5
+go 1.21.6
 
 require (
 	github.com/TBD54566975/scaffolder v0.8.0
