@@ -5,7 +5,7 @@ go 1.22.0
 require (
 	github.com/TBD54566975/scaffolder v0.8.0
 	github.com/alecthomas/assert/v2 v2.5.0
-	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
+	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
 )
 
 require (
