@@ -14,5 +14,10 @@
       matchManagers: ["gomod"],
       enabled: false,
     },
+    {
+      matchPackageNames: ["golangci-lint"],
+      matchManagers: ["hermit"],
+      enabled: false,
+    },
   ],
 }
