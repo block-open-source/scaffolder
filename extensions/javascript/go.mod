@@ -1,6 +1,6 @@
 module github.com/TBD54566975/scaffolder/extensions/javascript
 
-go 1.22.0
+go 1.22.1
 
 require (
 	github.com/TBD54566975/scaffolder v0.8.0
