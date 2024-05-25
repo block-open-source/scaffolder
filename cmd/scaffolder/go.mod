@@ -3,7 +3,7 @@ module github.com/TBD54566975/scaffolder/cmd/scaffolder
 go 1.22.2
 
 require (
-	github.com/TBD54566975/scaffolder v0.8.0
+	github.com/TBD54566975/scaffolder v0.9.0
 	github.com/iancoleman/strcase v0.3.0
 )
 
@@ -16,10 +16,6 @@ require (
 )
 
 require (
-	github.com/TBD54566975/scaffolder/extensions/javascript v0.8.0
+	github.com/TBD54566975/scaffolder/extensions/javascript v0.9.0
 	github.com/alecthomas/kong v0.9.0
 )
-
-replace github.com/TBD54566975/scaffolder/extensions/javascript => ../../extensions/javascript
-
-replace github.com/TBD54566975/scaffolder => ../..
