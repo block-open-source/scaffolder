@@ -14,14 +14,17 @@ import (
 	"github.com/TBD54566975/scaffolder/extensions/javascript"
 )
 
+var version string = "dev"
+
 var cli struct {
-	JSON     *os.File `help:"JSON file containing the context to use."`
-	Template string   `arg:"" help:"Template directory." type:"existingdir"`
-	Dest     string   `arg:"" help:"Destination directory to scaffold." type:"existingdir"`
+	Version  kong.VersionFlag `help:"Show version."`
+	JSON     *os.File         `help:"JSON file containing the context to use."`
+	Template string           `arg:"" help:"Template directory." type:"existingdir"`
+	Dest     string           `arg:"" help:"Destination directory to scaffold." type:"existingdir"`
 }
 
 func main() {
-	kctx := kong.Parse(&cli)
+	kctx := kong.Parse(&cli, kong.Vars{"version": version})
 	context := json.RawMessage{}
 	if cli.JSON != nil {
 		if err := json.NewDecoder(cli.JSON).Decode(&context); err != nil {

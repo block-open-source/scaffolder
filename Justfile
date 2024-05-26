@@ -34,3 +34,10 @@ tag:
   git tag -f "cmd/scaffolder/$version"
   git tag -f "extensions/javascript/$version"
   echo "use 'git push && git push --tags' to push the tags to the remote"
+
+release:
+  #!/bin/bash
+  set -euxo pipefail
+  cd cmd/scaffolder
+  version=$(svu current)
+  go build -ldflags "-X main.version=$version" -o scaffolder .
