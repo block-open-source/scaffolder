@@ -5,13 +5,13 @@ go 1.22.2
 require (
 	github.com/alecthomas/assert/v2 v2.10.0
 	github.com/alecthomas/kong v0.9.0
-	github.com/dop251/goja v0.0.0-20240804150220-aafb077cb27b
+	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/iancoleman/strcase v0.3.0
 )
 
 require (
 	github.com/alecthomas/repr v0.4.0 // indirect
-	github.com/dlclark/regexp2 v1.7.0 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
