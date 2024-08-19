@@ -58,6 +58,7 @@ linters:
     - depguard
     - tagalign
     - gomoddirectives
+    - mnd
 
 linters-settings:
   govet:
