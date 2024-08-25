@@ -35,3 +35,24 @@ jobs:
             golangci-lint run
           ); done
           git diff
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: ["test", "lint"]
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cashapp/activate-hermit@v1
+      - uses: charlesthomas/github-action-svu@v1.0.5+2.1.1
+        id: svu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          git tag ${{ steps.svu.outputs.next }}
+          goreleaser release --fail-fast
+          git push --tags
+        if: ${{ steps.svu.outputs.changed == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
