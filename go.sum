@@ -22,6 +22,8 @@ github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe h1:jwFJkgsdelB87ohlXaA
 github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe/go.mod h1:DF+w/nLMIkvRpyhd/0K+Okbh3fVZBtXLwRtS/ccAa5w=
 github.com/dop251/goja v0.0.0-20240816181238-8130cadc5774 h1:5S7RAWahWxsxBd5/epao7e4+9ufpbsrqmjMfVm43kv4=
 github.com/dop251/goja v0.0.0-20240816181238-8130cadc5774/go.mod h1:MxLav0peU43GgvwVgNbLAj1s/bSGboKkhuULvq/7hx4=
+github.com/dop251/goja v0.0.0-20240822155948-fa6d1ed5e4b6 h1:0x8Sh2rKCTVUQnRTJFIwtRWAp91VMsnATQEsMAg14kM=
+github.com/dop251/goja v0.0.0-20240822155948-fa6d1ed5e4b6/go.mod h1:MxLav0peU43GgvwVgNbLAj1s/bSGboKkhuULvq/7hx4=
 github.com/go-sourcemap/sourcemap v2.1.3+incompatible h1:W1iEw64niKVGogNgBN3ePyLFfuisuzeidWPMPWmECqU=
 github.com/go-sourcemap/sourcemap v2.1.3+incompatible/go.mod h1:F8jJfvm2KbVjc5NqelyYJmf/v5J0dwNLS2mL4sNA1Jg=
 github.com/google/pprof v0.0.0-20230207041349-798e818bf904 h1:4/hN5RUoecvl+RmJRE2YxKWtnnQls6rQjjW5oV7qg2U=
