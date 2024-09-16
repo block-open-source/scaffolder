@@ -4,7 +4,7 @@ go 1.22.2
 
 require (
 	github.com/alecthomas/assert/v2 v2.10.0
-	github.com/alecthomas/kong v0.9.0
+	github.com/alecthomas/kong v1.2.1
 	github.com/dop251/goja v0.0.0-20240822155948-fa6d1ed5e4b6
 	github.com/iancoleman/strcase v0.3.0
 )
